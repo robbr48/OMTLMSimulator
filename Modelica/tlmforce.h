@@ -9,8 +9,9 @@
 extern "C" {
 #endif
 
-//! Initialize one interface
-void initialize_interface(const char* markerID);
+void* initialize_TLM();
+
+void deinitialize_TLM(void* in_TLMPluginStructObj);
 
 //! Enable, disable debug output.
 void set_debug_mode(int debugFlgIn);
@@ -32,7 +33,8 @@ double get_tlm_delay();
 //! \param speed       The velocity vector (x,y,z) of the interface at this point in time. Three component vector/array.
 //! \param ang_speed   The angular velocity vector (rotational speed around x,y,z) of the interface at this point in time.
 //!                    Three component vector/array.
-void set_tlm_motion(const char* interfaceID, // The TLM interface (frame) ID
+void set_tlm_motion(void* in_TLMPluginStructObj,
+                    const char* interfaceID, // The TLM interface (frame) ID
                     double time,             // Current simulation time
                     double position[],       // Interface position data
                     double orientation[],    // Interface rotation matrix
@@ -56,7 +58,8 @@ void set_tlm_motion(const char* interfaceID, // The TLM interface (frame) ID
 //!                    Three component vector/array.
 //! \retval force      The resulting force (x,y,z) acting in the interface. Three component vector/array.
 //! \retval torque     The resulting torque (x,y,z) acting in the interface. Three component vector/array.
-void calc_tlm_force(const char* interfaceID, // The calling TLM interface (frame) ID
+void calc_tlm_force(void* in_TLMPluginStructObj,
+                    const char* interfaceID, // The calling TLM interface (frame) ID
                     double time,             // Current simulation time
                     double position[],       // Interface position data
                     double orientation[],    // Interface rotation matrix

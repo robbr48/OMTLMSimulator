@@ -26,8 +26,13 @@ static const char* TLM_CONFIG_FILE_NAME = "tlm.config";
 // please use the following syntax: debugOutFile<< "debug message" <<endl;
 static const char* TLM_DEBUG_FILE_NAME = "tlmmodelica.log";
 
-//! The TLM Plugin instance.
-static TLMPlugin* Plugin = 0;
+typedef struct {
+  TLMPlugin* Plugin;
+  int referenceCount;
+  int registerCount;
+} TLMPluginStruct;
+
+TLMPluginStruct* TLMPluginStructObj = 0;
 
 //! Debug enabled or disabled?
 static bool debugFlg = false;
@@ -42,13 +47,19 @@ std::map<std::string, int> MarkerIDmap;
 extern "C" {
 #endif
 
-void initialize_TLM()
+void* initialize_TLM()
 {
-    // Avoid reinitialization!
-    assert( Plugin == 0 );
+    if (TLMPluginStructObj) {
+    TLMPluginStructObj->referenceCount += 1;
+    return (void*)TLMPluginStructObj;
+    }
+    set_debug_mode(debugFlg);
 
+    TLMPluginStructObj = (TLMPluginStruct*)malloc(sizeof(TLMPluginStruct));
     // Create the plugin
-    Plugin = TLMPlugin::CreateInstance();
+    TLMPluginStructObj->Plugin = TLMPlugin::CreateInstance();
+    TLMPluginStructObj->referenceCount = 1;
+    TLMPluginStructObj->registerCount = 0;
 
     // Read parameters from a file
     ifstream tlmConfigFile(TLM_CONFIG_FILE_NAME);
@@ -66,43 +77,50 @@ void initialize_TLM()
     tlmConfigFile >> timeEnd;
     tlmConfigFile >> maxStep;
 
-    if(debugFlg && !debugOutFile.is_open() ){
-        debugOutFile.open(TLM_DEBUG_FILE_NAME);
-
-        if( debugOutFile.good()){
-            TLMErrorLog::SetOutStream(debugOutFile);
-        }
-
-        TLMErrorLog::SetDebugOut(true);
-    }
-
     if(!tlmConfigFile.good()) {
-        debugOutFile << "Error reading TLM configuration data from tlm.config" << endl;
-        exit(1);
+        TLMErrorLog::FatalError("Error reading TLM configuration data from tlm.config, exiting...");
+        return 0;
     }
 
-    if(! Plugin->Init( model,
+    if(! TLMPluginStructObj->Plugin->Init( model,
                        timeStart,
                        timeEnd,
                        maxStep,
                        serverName)) {
-        debugOutFile << "Error initializing the TLM plugin" << endl;
-        exit(1);
+        TLMErrorLog::FatalError("Error initializing the TLM plugin, exiting...");
+    return 0;
     }
+
+    return (void*)TLMPluginStructObj;
 }
 
 
-void initialize_interface(const char* markerID)
+void deinitialize_TLM(void* in_TLMPluginStructObj)
 {
-    // Check if interface is registered. If it's not, register it
-    if( MarkerIDmap.find(markerID) == MarkerIDmap.end() ){
-        if( Plugin == 0 ){
-            initialize_TLM();
-        }
+  TLMPluginStruct* TLMPluginStructObj = (TLMPluginStruct*)in_TLMPluginStructObj;
+  if (TLMPluginStructObj->referenceCount == 1) {
+      free(TLMPluginStructObj);
+      TLMPluginStructObj = 0;
+  } else {
+      TLMPluginStructObj->referenceCount -= 1;
+  }
+}
 
-        MarkerIDmap[markerID] = Plugin->RegisteTLMInterface(markerID);
+
+void register_tlm_interface(void *in_TLMPluginStructObj, const char *interfaceID, const char *causality, int dimensions, const char *domain)
+{
+   TLMPluginStruct* TLMPluginStructObj = (TLMPluginStruct*)in_TLMPluginStructObj;
+
+   //Check if interface is registered. If it's not, register it
+    if( MarkerIDmap.find(interfaceID) == MarkerIDmap.end() ){
+        MarkerIDmap[interfaceID] = TLMPluginStructObj->Plugin->RegisteTLMInterface(interfaceID,
+                                                                                   dimensions,
+                                                                                   causality,
+                                                                                   domain);
+        TLMPluginStructObj->registerCount += 1;
     }
 }
+
 
 
 void set_debug_mode(int debugFlgIn)
@@ -154,18 +172,20 @@ double get_tlm_delay()
     return res;
 }
 
-void set_tlm_motion(const char* markerID,   // The calling marker ID
+void set_tlm_motion(void* in_TLMPluginStructObj,
+                    const char* markerID,   // The calling marker ID
                     double time,    // Current simulation time
                     double position[], // Marker position data
                     double orientation[], // Marker rotation matrix
                     double speed[],      // Marker translational velocity
                     double ang_speed[])
 {
+    TLMPluginStruct* TLMPluginStructObj = (TLMPluginStruct*)in_TLMPluginStructObj;
     if( MarkerIDmap.find(markerID) != MarkerIDmap.end() ){
         int interfaceID = MarkerIDmap[markerID];
 
         if( interfaceID >= 0 ){
-            Plugin->SetMotion3D(interfaceID,          // Send data to the Plugin
+            TLMPluginStructObj->Plugin->SetMotion3D(interfaceID,          // Send data to the Plugin
                               time,
                               position,
                               orientation,
@@ -181,7 +201,8 @@ void set_tlm_motion(const char* markerID,   // The calling marker ID
 
 // The calc_tlm_force function is called directly from the Modelica interface function
 // It needs special declaration
-void calc_tlm_force(const char* markerID,   // The calling marker ID
+void calc_tlm_force(void* in_TLMPluginStructObj,
+                    const char* markerID,   // The calling marker ID
                     double time,    // Current simulation time
                     //double lastConvergedTime, // Last converged time
                     double position[], // Marker position data
@@ -194,21 +215,26 @@ void calc_tlm_force(const char* markerID,   // The calling marker ID
     double forceOut[6];
     int f, t;
 
-    // Check if interface is registered. If it's not, register it
-    if( MarkerIDmap.find(markerID) == MarkerIDmap.end() ){
-        if( Plugin == 0 ){
-            initialize_TLM();
-        }
+    TLMPluginStruct* TLMPluginStructObj = (TLMPluginStruct*)in_TLMPluginStructObj;
 
-        MarkerIDmap[markerID] = Plugin->RegisteTLMInterface(markerID);
+    // defined in OpenModelica dassl.c
+    extern int RHSFinalFlag;
+
+    bool allRegistered = (TLMPluginStructObj->referenceCount == TLMPluginStructObj->registerCount);
+
+    if( RHSFinalFlag && allRegistered){
+      set_tlm_motion(TLMPluginStructObj, markerID, time, position, orientation, speed, ang_speed);
     }
+
+    // Check if interface is registered. If it's not, register it
+    register_tlm_interface(TLMPluginStructObj,markerID, "Bidirectional", 6, "Mechanical");
 
     // Interface force ID in TLM manager
     int interfaceID = MarkerIDmap[markerID];
 
     if( interfaceID >= 0 ){
         // Call the plugin to get reaction force
-        Plugin->GetForce3D(interfaceID,
+        TLMPluginStructObj->Plugin->GetForce3D(interfaceID,
                          time,
                          position,
                          orientation,
