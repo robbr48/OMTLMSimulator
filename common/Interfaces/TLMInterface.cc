@@ -38,16 +38,25 @@ TLMInterface::TLMInterface(TLMClientComm& theComm, std::string& aName, double St
     Domain(domain) {
     Comm.CreateInterfaceRegMessage(aName, Dimensions, Causality, Domain, Message);
     Message.SocketHandle = Comm.GetSocketHandle();
-
+#ifdef NAMED_PIPES
+    Message.Pipe = Comm.GetPipeToMst();
+#endif
     TLMCommUtil::SendMessage(Message);
-
+#ifdef NAMED_PIPES
+    Message.Pipe = Comm.GetPipeFromMst();
+    TLMErrorLog::Debug("Tomte.");
+    while(!TLMCommUtil::ReceiveMessage(Message)) {}
+    TLMErrorLog::Debug("Nisse.");
+#else
     TLMCommUtil::ReceiveMessage(Message);
+#endif
+
     while(Message.Header.MessageType != TLMMessageTypeConst::TLM_REG_INTERFACE) {
         TLMCommUtil::ReceiveMessage(Message);
     }
     InterfaceID =  Message.Header.TLMInterfaceID;
 
-    TLMErrorLog::Log(std::string("Interface ") + GetName() + " got ID " + TLMErrorLog::ToStdStr(InterfaceID));
+    TLMErrorLog::Info(std::string("Interface ") + GetName() + " got ID " + TLMErrorLog::ToStdStr(InterfaceID));
 
     Comm.UnpackRegInterfaceMessage(Message, Params);
 

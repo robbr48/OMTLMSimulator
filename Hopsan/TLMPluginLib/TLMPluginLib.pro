@@ -40,6 +40,8 @@ include(hopsanDebugReleaseCompile.prf)
 
 DEFINES += INTERFACE_TYPES
 
+DEFINES += NAMED_PIPES
+
 CONFIG += c++11
 
 # -------------------------------------------------

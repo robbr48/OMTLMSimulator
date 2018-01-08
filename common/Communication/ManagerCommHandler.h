@@ -8,6 +8,9 @@
 #ifndef ManagerCommHandler_h_
 #define ManagerCommHandler_h_
 
+#include <sys/types.h>  // mkfifo
+#include <sys/stat.h>   // mkfifo
+#include <fcntl.h>
 #include <string>
 #include <map>
 // note: <map> must be above all, because of a VC2005 bug (on _Wherenode)
@@ -49,6 +52,11 @@ private:
 
     //! The multimap to store monitoring interface sockets.
     std::multimap<int,int> monitorInterfaceMap;
+
+#ifdef NAMED_PIPES
+    int MonitorToMstPipe;
+    int MstToMonitorPipe;
+#endif
 
     //! The multimap mutex for synchronisation of "monitorInterfaceMap" access
     SimpleLock monitorMapLock;
@@ -92,6 +100,7 @@ public:
     static void* thread_ReaderThreadRun(void * arg) {
         ManagerCommHandler* con = (ManagerCommHandler*)arg;
 
+#if 0
         if(con->TheModel.GetSimParams().GetMonitorPort() > 0) {
             while(!con->MonitorConnected) {
 #ifndef _MSC_VER
@@ -99,9 +108,10 @@ public:
 #else
                 Sleep(10); // milli seconds
 #endif
-                TLMErrorLog::Log("Waiting for monitor to connect");
+                TLMErrorLog::Info("Waiting for monitor to connect");
             }
         }
+#endif
 
         try {
             con->ReaderThreadRun();
@@ -143,6 +153,7 @@ public:
     static void* thread_WriterThreadRun(void * arg) {
         ManagerCommHandler* con = (ManagerCommHandler*)arg;
 
+#if 0
         if(con->TheModel.GetSimParams().GetMonitorPort() > 0) {
             while(!con->MonitorConnected) {
 #ifndef _MSC_VER
@@ -150,10 +161,10 @@ public:
 #else
                 Sleep(10); // milli seconds
 #endif
-                TLMErrorLog::Log("Waiting for monitor to connect");
+                TLMErrorLog::Info("Waiting for monitor to connect");
             }
         }
-
+#endif
         try {
             con->WriterThreadRun();
         }

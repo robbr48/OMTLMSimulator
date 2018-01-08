@@ -8,6 +8,7 @@
 #ifndef TLMClientComm_h_
 #define  TLMClientComm_h_
 
+#include <fcntl.h>
 #include <vector>
 #include <deque>
 #include <string>
@@ -21,6 +22,10 @@
 class TLMClientComm {
 
     int SocketHandle;
+#ifdef NAMED_PIPES
+    int PipeToMst;
+    int PipeFromMst;
+#endif
     
 public:
 
@@ -74,6 +79,12 @@ public:
 
     //! GetSocketHandle returns the SocketHandle obtained after a call to ConnectManager
     int GetSocketHandle() const { return SocketHandle; }
+
+#ifdef NAMED_PIPES
+    void InitializeNamedPipes(std::string& Name);
+    int GetPipeToMst() const { return PipeToMst; }
+    int GetPipeFromMst() const { return PipeFromMst; }
+#endif
 };
 
 #endif

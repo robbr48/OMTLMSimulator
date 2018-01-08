@@ -28,16 +28,20 @@ do
 	cd $OMTLMSimulatorPath/CompositeModels/$i/
 
 	# Check if fetch interfaces works
-	rm interfaceData.xml > /dev/null 2>&1
-	$OMTLMSimulatorPath/bin/tlmmanager -r $OMTLMSimulatorPath/CompositeModels/$i/$i.xml > /dev/null 2>&1
+#	rm interfaceData.xml > /dev/null 2>&1
+#	$OMTLMSimulatorPath/bin/tlmmanager -r $OMTLMSimulatorPath/CompositeModels/$i/$i.xml > /dev/null 2>&1
+#
+#	if ! [ -s interfaceData.xml ]
+#	then
+#		tput setaf 1
+#		let "success = 0"
+#		echo Fetch interface data failed!
+#		tput sgr0
+#	fi
+#
+#	exit
 
-	if ! [ -s interfaceData.xml ]
-	then
-		tput setaf 1
-		let "success = 0"
-		echo Fetch interface data failed!
-		tput sgr0
-	fi
+	exit
 
 	$OMTLMSimulatorPath/bin/tlmmanager -p 11111 -m $monitorport $OMTLMSimulatorPath/CompositeModels/$i/$i.xml > /dev/null 2>&1 &
 	$OMTLMSimulatorPath/bin/tlmmonitor -n 1000 127.0.1.1:$monitorport $OMTLMSimulatorPath/CompositeModels/$i/$i.xml

@@ -16,18 +16,26 @@ void MonitoringPluginImplementer::ReceiveTimeData(TLMInterface* reqIfc, double t
     while(time > reqIfc->GetNextRecvTime()) { // while data is needed
 
         // Receive data untill there is info for this interface
-        string mess("Interface ");
-        TLMErrorLog::Log(mess + reqIfc->GetName() +
-                         " needs data for time= " + TLMErrorLog::ToStdStr(time));
+        if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+            TLMErrorLog::Info("Interface " +
+                              reqIfc->GetName() +
+                              " needs data for time= " +
+                              TLMErrorLog::ToStdStr(time));
+        }
 
         TLMInterface* ifc = NULL;
 
         do {
 
             // Receive a message
+#ifdef NAMED_PIPES
+            Message.Pipe = ClientComm.GetPipeFromMst();
+            while(!TLMCommUtil::ReceiveMessage(Message))
+              continue;
+#else
             if(!TLMCommUtil::ReceiveMessage(Message)) // on error leave this loop and use extrapolation
                 break;
-
+#endif
             // Get the target ID
             int id = Message.Header.TLMInterfaceID;
 
@@ -39,8 +47,8 @@ void MonitoringPluginImplementer::ReceiveTimeData(TLMInterface* reqIfc, double t
             ifc->UnpackTimeData(Message);
 
             // Received data
-            if(TLMErrorLog::IsNormalErrorLogOn()) {
-              TLMErrorLog::Log(string("Interface ") + ifc->GetName() + " got data until time= "
+            if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+              TLMErrorLog::Info(string("Interface ") + ifc->GetName() + " got data until time= "
                                + TLMErrorLog::ToStdStr(ifc->GetNextRecvTime()));
             }
 
@@ -48,7 +56,7 @@ void MonitoringPluginImplementer::ReceiveTimeData(TLMInterface* reqIfc, double t
 
         if(ifc == NULL) break; // receive error - breaking
 
-        TLMErrorLog::Log(string("Got data until time=") + TLMErrorLog::ToStdStr(ifc->GetNextRecvTime()));
+        TLMErrorLog::Info(string("Got data until time=") + TLMErrorLog::ToStdStr(ifc->GetNextRecvTime()));
     }
 }
 
@@ -61,7 +69,16 @@ bool MonitoringPluginImplementer::Init(std::string name,
                                        double timeEnd,
                                        double maxStep,
                                        std::string ServerName) {
+    TLMErrorLog::Debug("Daimfudge.");
     if(Connected) return true;
+    TLMErrorLog::Debug("Skum tomte.");
+
+#ifdef NAMED_PIPES
+    std::string monitorName = "monitor";
+    ClientComm.InitializeNamedPipes(monitorName);
+#endif
+
+    TLMErrorLog::Debug("Knäck.");
 
     string::size_type colPos = ServerName.rfind(':');
 
@@ -105,4 +122,11 @@ bool MonitoringPluginImplementer::Init(std::string name,
     ModelChecked = true;
 
     return true;
+}
+
+void MonitoringPluginImplementer::ReportMonitorReady()
+{
+    TLMErrorLog::Debug("Reporting monitor ready...");
+    CheckModel();
+    TLMErrorLog::Debug("Monitor has reported ready.");
 }

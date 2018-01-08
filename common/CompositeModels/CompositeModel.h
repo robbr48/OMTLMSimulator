@@ -229,6 +229,11 @@ class TLMComponentProxy {
     //! socket used to communicate between proxy and the component on the Client
     int SocketHandle;
 
+#ifdef NAMED_PIPES
+    int PipeFromMst;
+    int PipeToMst;
+#endif
+
     //! This flag indicates that the component done sending "RegInterface"
     //! requests and is ready run the simualtion.
     bool ReadyToSim;
@@ -301,6 +306,21 @@ public:
     int GetSocketHandle() const {
         return SocketHandle;
     }
+
+#ifdef NAMED_PIPES
+    void SetNamedPipes(int fromMst, int toMst) {
+        PipeFromMst = fromMst;
+        PipeToMst = toMst;
+    }
+
+    int GetPipeFromMst() const {
+        return PipeFromMst;
+    }
+
+    int GetPipeToMst() const {
+        return PipeToMst;
+    }
+#endif
     
     //! SetReadyToSim sets the ReadyToSim flag when all the TLM interfaces of this component
     //! are connected and the Component is running simulation.

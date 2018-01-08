@@ -115,7 +115,7 @@ int TLMManagerComm::CreateServerSocket() {
 
     ContactSocket = theSckt;
 
-    TLMErrorLog::Log(string("TLM manager is listening on port ") + TLMErrorLog::ToStdStr(ServerPort));
+    TLMErrorLog::Info(string("TLM manager is listening on port ") + TLMErrorLog::ToStdStr(ServerPort));
 
     return theSckt;
 }
@@ -166,13 +166,18 @@ void TLMManagerComm::SwitchToRunningMode() {
 }
 
 int TLMManagerComm::AcceptComponentConnections() {
-    TLMErrorLog::Log("TLM_manager - accepting connection");
+    TLMErrorLog::Info("TLM_manager - accepting connection");
+#ifndef NAMED_PIPES
     int theCon;
     if((theCon = accept(ContactSocket,NULL,NULL)) < 0) {
         TLMErrorLog::FatalError("Could not accept a connection");
     }
-
+#else
+    int theCon = 1;
+#endif
     ClientSockets.push_back(theCon);
+
+    TLMErrorLog::Debug("Hundvalp");
 
     return theCon;
 }

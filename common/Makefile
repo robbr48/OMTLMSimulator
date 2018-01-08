@@ -14,7 +14,7 @@ include $(MAKEFILEHEADHOME)/Makefile.head
 MISCHOME = ../3rdParty/misc
 TIMEHOME = ../3rdParty/rtime
 
-CC += -std=c++11 
+CC += -std=c++11 -DNAMED_PIPES
 
 SRCCLT= Plugin/PluginImplementer.cc \
 	Plugin/MonitoringPluginImplementer.cc \

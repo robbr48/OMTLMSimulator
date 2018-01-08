@@ -1,20 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<hopsanmodelfile hmfversion="0.4" hopsancoreversion="2.8.0.20170714.2220" hopsanguiversion="2.8.0.20170725.2313">
+<hopsanmodelfile hopsanguiversion="2.8.0.20171002.1218" hopsancoreversion="2.8.0.20171006.1016" hmfversion="0.4">
   <requirements>
     <componentlibrary>TLMPluginLib</componentlibrary>
     <componentlibrary>HopsanDefaultComponentLibrary</componentlibrary>
     <componentlibrary>HopsanExampleComponentLibrary</componentlibrary>
+    <componentlibrary>HopsanExampleComponentLibrary</componentlibrary>
   </requirements>
-  <system cqstype="UndefinedCQSType" subtypename="" disabled="false" locked="false" typename="Subsystem" name="MultiplyAndAdd">
-    <simulationtime inherit_timestep="true" timestep="0.001" stop="10" start="0"/>
+  <system subtypename="" typename="Subsystem" cqstype="UndefinedCQSType" locked="false" name="MultiplyAndAdd" disabled="false">
+    <simulationtime inherit_timestep="true" start="0" stop="10" timestep="0.001"/>
     <simulationlogsettings numsamples="2048" starttime="0"/>
     <parameters/>
     <aliases/>
     <hopsangui>
-      <pose x="0" y="0" flipped="false" a="0"/>
+      <pose x="0" flipped="false" a="0" y="0"/>
       <nametext visible="0" position="0"/>
-      <animation hydraulicminpressure="0" hydraulicmaxpressure="20000000" flowspeed="100"/>
-      <viewport x="2499.5" y="2484.5" zoom="1"/>
+      <animation hydraulicmaxpressure="20000000" hydraulicminpressure="0" flowspeed="100"/>
+      <viewport x="2499.5" zoom="1" y="2484"/>
       <ports hidden="1"/>
       <names hidden="1"/>
       <graphics type="user"/>
@@ -25,7 +26,7 @@
             <icon type="defaultmissing" path="subsystemDefault.svg"/>
           </icons>
           <ports/>
-          <animation hydraulicminpressure="0" hydraulicmaxpressure="20000000" flowspeed="100"/>
+          <animation hydraulicmaxpressure="20000000" hydraulicminpressure="0" flowspeed="100"/>
         </modelobject>
       </hopsanobjectappearance>
       <optimization>
@@ -54,152 +55,20 @@
       </senstivitityanalysis>
     </hopsangui>
     <objects>
-      <component cqstype="C" subtypename="" disabled="false" locked="false" typename="TLMPluginInterfaceSignalOutput" name="out2">
-        <parameters>
-          <parameter type="bool" unit="" value="0" name="Debug"/>
-          <parameter type="double" unit="" value="0" name="in#Value"/>
-        </parameters>
-        <ports>
-          <port porttype="ReadPortType" nodetype="NodeSignal" name="in"/>
-        </ports>
-        <hopsangui>
-          <pose x="2461.333334" y="2420" flipped="false" a="0"/>
-          <nametext visible="0" position="0"/>
-          <animation hydraulicminpressure="0" hydraulicmaxpressure="20000000" flowspeed="100"/>
-          <hopsanobjectappearance version="0.3">
-            <modelobject displayname="out2" typename="TLMPluginInterfaceSignalOutput">
-              <ports/>
-            </modelobject>
-          </hopsanobjectappearance>
-        </hopsangui>
-      </component>
-      <component cqstype="C" subtypename="" disabled="false" locked="false" typename="TLMPluginInterfaceSignalOutput" name="out1">
-        <parameters>
-          <parameter type="bool" unit="" value="0" name="Debug"/>
-          <parameter type="double" unit="" value="0" name="in#Value"/>
-        </parameters>
-        <ports>
-          <port porttype="ReadPortType" nodetype="NodeSignal" name="in"/>
-        </ports>
-        <hopsangui>
-          <pose x="2461.488343" y="2326.269376" flipped="false" a="0"/>
-          <nametext visible="0" position="0"/>
-          <animation hydraulicminpressure="0" hydraulicmaxpressure="20000000" flowspeed="100"/>
-          <hopsanobjectappearance version="0.3">
-            <modelobject displayname="out1" typename="TLMPluginInterfaceSignalOutput">
-              <ports/>
-            </modelobject>
-          </hopsanobjectappearance>
-        </hopsangui>
-      </component>
-      <component cqstype="S" subtypename="" disabled="false" locked="false" typename="SignalMultiply" name="Multiply">
-        <parameters>
-          <parameter type="double" unit="" value="1" name="in1#Value"/>
-          <parameter type="double" unit="" value="1" name="in2#Value"/>
-        </parameters>
-        <ports>
-          <port porttype="ReadPortType" nodetype="NodeSignal" name="in1"/>
-          <port porttype="ReadPortType" nodetype="NodeSignal" name="in2"/>
-          <port porttype="WritePortType" nodetype="NodeSignal" name="out"/>
-        </ports>
-        <hopsangui>
-          <pose x="2275" y="2371.77" flipped="false" a="0"/>
-          <nametext visible="0" position="0"/>
-          <animation hydraulicminpressure="0" hydraulicmaxpressure="20000000" flowspeed="100"/>
-          <hopsanobjectappearance version="0.3">
-            <modelobject displayname="Multiply" typename="SignalMultiply">
-              <ports/>
-            </modelobject>
-          </hopsanobjectappearance>
-        </hopsangui>
-      </component>
-      <component cqstype="C" subtypename="" disabled="false" locked="false" typename="TLMPluginHandler" name="TLM_Plugin_Handler">
-        <parameters>
-          <parameter type="bool" unit="" value="0" name="Debug"/>
-        </parameters>
-        <ports/>
-        <hopsangui>
-          <pose x="2220.178324" y="2198.922495" flipped="false" a="0"/>
-          <nametext visible="0" position="0"/>
-          <animation hydraulicminpressure="0" hydraulicmaxpressure="20000000" flowspeed="100"/>
-          <hopsanobjectappearance version="0.3">
-            <modelobject displayname="TLM_Plugin_Handler" typename="TLMPluginHandler">
-              <ports/>
-            </modelobject>
-          </hopsanobjectappearance>
-        </hopsangui>
-      </component>
-      <component cqstype="C" subtypename="" disabled="false" locked="false" typename="TLMPluginInterfaceSignalInput" name="in2">
-        <parameters>
-          <parameter type="bool" unit="" value="0" name="Debug"/>
-          <parameter type="double" unit="" value="0" name="out#Value"/>
-        </parameters>
-        <ports>
-          <port porttype="WritePortType" nodetype="NodeSignal" name="out"/>
-        </ports>
-        <hopsangui>
-          <pose x="2146" y="2373.134688" flipped="false" a="0"/>
-          <nametext visible="0" position="0"/>
-          <animation hydraulicminpressure="0" hydraulicmaxpressure="20000000" flowspeed="100"/>
-          <hopsanobjectappearance version="0.3">
-            <modelobject displayname="in2" typename="TLMPluginInterfaceSignalInput">
-              <ports/>
-            </modelobject>
-          </hopsanobjectappearance>
-        </hopsangui>
-      </component>
-      <component cqstype="C" subtypename="" disabled="false" locked="false" typename="TLMPluginInterfaceSignalInput" name="in1">
-        <parameters>
-          <parameter type="bool" unit="" value="0" name="Debug"/>
-          <parameter type="double" unit="" value="0" name="out#Value"/>
-        </parameters>
-        <ports>
-          <port porttype="WritePortType" nodetype="NodeSignal" name="out"/>
-        </ports>
-        <hopsangui>
-          <pose x="2146" y="2326.269376" flipped="false" a="0"/>
-          <nametext visible="0" position="0"/>
-          <animation hydraulicminpressure="0" hydraulicmaxpressure="20000000" flowspeed="100"/>
-          <hopsanobjectappearance version="0.3">
-            <modelobject displayname="in1" typename="TLMPluginInterfaceSignalInput">
-              <ports/>
-            </modelobject>
-          </hopsanobjectappearance>
-        </hopsangui>
-      </component>
-      <component cqstype="C" subtypename="" disabled="false" locked="false" typename="TLMPluginInterfaceSignalInput" name="in3">
-        <parameters>
-          <parameter type="bool" unit="" value="0" name="Debug"/>
-          <parameter type="double" unit="" value="0" name="out#Value"/>
-        </parameters>
-        <ports>
-          <port porttype="WritePortType" nodetype="NodeSignal" name="out"/>
-        </ports>
-        <hopsangui>
-          <pose x="2144" y="2420" flipped="false" a="0"/>
-          <nametext visible="0" position="0"/>
-          <animation hydraulicminpressure="0" hydraulicmaxpressure="20000000" flowspeed="100"/>
-          <hopsanobjectappearance version="0.3">
-            <modelobject displayname="in3" typename="TLMPluginInterfaceSignalInput">
-              <ports/>
-            </modelobject>
-          </hopsanobjectappearance>
-        </hopsangui>
-      </component>
-      <component cqstype="S" subtypename="" disabled="false" locked="false" typename="SignalAdd" name="Add">
+      <component subtypename="" typename="SignalAdd" cqstype="S" locked="false" name="Add" disabled="false">
         <parameters>
           <parameter type="double" unit="" value="0" name="in1#Value"/>
           <parameter type="double" unit="" value="0" name="in2#Value"/>
         </parameters>
         <ports>
-          <port porttype="ReadPortType" nodetype="NodeSignal" name="in1"/>
-          <port porttype="ReadPortType" nodetype="NodeSignal" name="in2"/>
-          <port porttype="WritePortType" nodetype="NodeSignal" name="out"/>
+          <port nodetype="NodeSignal" name="in1" porttype="ReadPortType"/>
+          <port nodetype="NodeSignal" name="in2" porttype="ReadPortType"/>
+          <port nodetype="NodeSignal" name="out" porttype="WritePortType"/>
         </ports>
         <hopsangui>
-          <pose x="2345.33" y="2371.77" flipped="true" a="180"/>
+          <pose x="2345.33" flipped="true" a="180" y="2371.77"/>
           <nametext visible="0" position="0"/>
-          <animation hydraulicminpressure="0" hydraulicmaxpressure="20000000" flowspeed="100"/>
+          <animation hydraulicmaxpressure="20000000" hydraulicminpressure="0" flowspeed="100"/>
           <hopsanobjectappearance version="0.3">
             <modelobject displayname="Add" typename="SignalAdd">
               <ports/>
@@ -207,9 +76,141 @@
           </hopsanobjectappearance>
         </hopsangui>
       </component>
+      <component subtypename="" typename="TLMPluginInterfaceSignalOutput" cqstype="C" locked="false" name="out1" disabled="false">
+        <parameters>
+          <parameter type="bool" unit="" value="0" name="Debug"/>
+          <parameter type="double" unit="" value="0" name="in#Value"/>
+        </parameters>
+        <ports>
+          <port nodetype="NodeSignal" name="in" porttype="ReadPortType"/>
+        </ports>
+        <hopsangui>
+          <pose x="2461.488343" flipped="false" a="0" y="2326.269376"/>
+          <nametext visible="0" position="0"/>
+          <animation hydraulicmaxpressure="20000000" hydraulicminpressure="0" flowspeed="100"/>
+          <hopsanobjectappearance version="0.3">
+            <modelobject displayname="out1" typename="TLMPluginInterfaceSignalOutput">
+              <ports/>
+            </modelobject>
+          </hopsanobjectappearance>
+        </hopsangui>
+      </component>
+      <component subtypename="" typename="TLMPluginInterfaceSignalOutput" cqstype="C" locked="false" name="out2" disabled="false">
+        <parameters>
+          <parameter type="bool" unit="" value="0" name="Debug"/>
+          <parameter type="double" unit="" value="0" name="in#Value"/>
+        </parameters>
+        <ports>
+          <port nodetype="NodeSignal" name="in" porttype="ReadPortType"/>
+        </ports>
+        <hopsangui>
+          <pose x="2461.333334" flipped="false" a="0" y="2420"/>
+          <nametext visible="0" position="0"/>
+          <animation hydraulicmaxpressure="20000000" hydraulicminpressure="0" flowspeed="100"/>
+          <hopsanobjectappearance version="0.3">
+            <modelobject displayname="out2" typename="TLMPluginInterfaceSignalOutput">
+              <ports/>
+            </modelobject>
+          </hopsanobjectappearance>
+        </hopsangui>
+      </component>
+      <component subtypename="" typename="TLMPluginInterfaceSignalInput" cqstype="C" locked="false" name="in3" disabled="false">
+        <parameters>
+          <parameter type="bool" unit="" value="0" name="Debug"/>
+          <parameter type="double" unit="" value="0" name="out#Value"/>
+        </parameters>
+        <ports>
+          <port nodetype="NodeSignal" name="out" porttype="WritePortType"/>
+        </ports>
+        <hopsangui>
+          <pose x="2144" flipped="false" a="0" y="2420"/>
+          <nametext visible="0" position="0"/>
+          <animation hydraulicmaxpressure="20000000" hydraulicminpressure="0" flowspeed="100"/>
+          <hopsanobjectappearance version="0.3">
+            <modelobject displayname="in3" typename="TLMPluginInterfaceSignalInput">
+              <ports/>
+            </modelobject>
+          </hopsanobjectappearance>
+        </hopsangui>
+      </component>
+      <component subtypename="" typename="SignalMultiply" cqstype="S" locked="false" name="Multiply" disabled="false">
+        <parameters>
+          <parameter type="double" unit="" value="1" name="in1#Value"/>
+          <parameter type="double" unit="" value="1" name="in2#Value"/>
+        </parameters>
+        <ports>
+          <port nodetype="NodeSignal" name="in1" porttype="ReadPortType"/>
+          <port nodetype="NodeSignal" name="in2" porttype="ReadPortType"/>
+          <port nodetype="NodeSignal" name="out" porttype="WritePortType"/>
+        </ports>
+        <hopsangui>
+          <pose x="2275" flipped="false" a="0" y="2371.77"/>
+          <nametext visible="0" position="0"/>
+          <animation hydraulicmaxpressure="20000000" hydraulicminpressure="0" flowspeed="100"/>
+          <hopsanobjectappearance version="0.3">
+            <modelobject displayname="Multiply" typename="SignalMultiply">
+              <ports/>
+            </modelobject>
+          </hopsanobjectappearance>
+        </hopsangui>
+      </component>
+      <component subtypename="" typename="TLMPluginInterfaceSignalInput" cqstype="C" locked="false" name="in1" disabled="false">
+        <parameters>
+          <parameter type="bool" unit="" value="0" name="Debug"/>
+          <parameter type="double" unit="" value="0" name="out#Value"/>
+        </parameters>
+        <ports>
+          <port nodetype="NodeSignal" name="out" porttype="WritePortType"/>
+        </ports>
+        <hopsangui>
+          <pose x="2146" flipped="false" a="0" y="2326.269376"/>
+          <nametext visible="0" position="0"/>
+          <animation hydraulicmaxpressure="20000000" hydraulicminpressure="0" flowspeed="100"/>
+          <hopsanobjectappearance version="0.3">
+            <modelobject displayname="in1" typename="TLMPluginInterfaceSignalInput">
+              <ports/>
+            </modelobject>
+          </hopsanobjectappearance>
+        </hopsangui>
+      </component>
+      <component subtypename="" typename="TLMPluginInterfaceSignalInput" cqstype="C" locked="false" name="in2" disabled="false">
+        <parameters>
+          <parameter type="bool" unit="" value="0" name="Debug"/>
+          <parameter type="double" unit="" value="0" name="out#Value"/>
+        </parameters>
+        <ports>
+          <port nodetype="NodeSignal" name="out" porttype="WritePortType"/>
+        </ports>
+        <hopsangui>
+          <pose x="2146" flipped="false" a="0" y="2373.134688"/>
+          <nametext visible="0" position="0"/>
+          <animation hydraulicmaxpressure="20000000" hydraulicminpressure="0" flowspeed="100"/>
+          <hopsanobjectappearance version="0.3">
+            <modelobject displayname="in2" typename="TLMPluginInterfaceSignalInput">
+              <ports/>
+            </modelobject>
+          </hopsanobjectappearance>
+        </hopsangui>
+      </component>
+      <component subtypename="" typename="TLMPluginHandler" cqstype="C" locked="false" name="TLM_Plugin_Handler" disabled="false">
+        <parameters>
+          <parameter type="bool" unit="" value="0" name="Debug"/>
+        </parameters>
+        <ports/>
+        <hopsangui>
+          <pose x="2220.178324" flipped="false" a="0" y="2198.922495"/>
+          <nametext visible="0" position="0"/>
+          <animation hydraulicmaxpressure="20000000" hydraulicminpressure="0" flowspeed="100"/>
+          <hopsanobjectappearance version="0.3">
+            <modelobject displayname="TLM_Plugin_Handler" typename="TLMPluginHandler">
+              <ports/>
+            </modelobject>
+          </hopsanobjectappearance>
+        </hopsangui>
+      </component>
     </objects>
     <connections>
-      <connect startport="out" startcomponent="Multiply" endport="in1" endcomponent="Add">
+      <connect endport="in1" endcomponent="Add" startport="out" startcomponent="Multiply">
         <hopsangui>
           <coordinates>
             <coordinate x="2287.50000000000000000000" y="2371.76999999999998181011"/>
@@ -221,7 +222,7 @@
           <style>solid</style>
         </hopsangui>
       </connect>
-      <connect startport="out" startcomponent="in1" endport="in2" endcomponent="Multiply">
+      <connect endport="in2" endcomponent="Multiply" startport="out" startcomponent="in1">
         <hopsangui>
           <coordinates>
             <coordinate x="2197.50000000000000000000" y="2326.26937600000019301660"/>
@@ -235,7 +236,7 @@
           <style>solid</style>
         </hopsangui>
       </connect>
-      <connect startport="out" startcomponent="in2" endport="in1" endcomponent="Multiply">
+      <connect endport="in1" endcomponent="Multiply" startport="out" startcomponent="in2">
         <hopsangui>
           <coordinates>
             <coordinate x="2197.50000000000000000000" y="2373.13468800000009650830"/>
@@ -247,7 +248,7 @@
           <style>solid</style>
         </hopsangui>
       </connect>
-      <connect startport="out" startcomponent="in3" endport="in2" endcomponent="Add">
+      <connect endport="in2" endcomponent="Add" startport="out" startcomponent="in3">
         <hopsangui>
           <coordinates>
             <coordinate x="2195.50000000000000000000" y="2420.00000000000000000000"/>
@@ -261,7 +262,7 @@
           <style>solid</style>
         </hopsangui>
       </connect>
-      <connect startport="out" startcomponent="Add" endport="in" endcomponent="out1">
+      <connect endport="in" endcomponent="out1" startport="out" startcomponent="Add">
         <hopsangui>
           <coordinates>
             <coordinate x="2357.82999999999992724042" y="2371.76999999999998181011"/>
@@ -277,7 +278,7 @@
           <style>solid</style>
         </hopsangui>
       </connect>
-      <connect startport="out" startcomponent="Add" endport="in" endcomponent="out2">
+      <connect endport="in" endcomponent="out2" startport="out" startcomponent="Add">
         <hopsangui>
           <coordinates>
             <coordinate x="2357.82999999999992724042" y="2371.76999999999998181011"/>

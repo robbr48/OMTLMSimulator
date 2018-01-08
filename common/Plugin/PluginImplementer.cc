@@ -24,13 +24,19 @@ TLMPlugin* TLMPlugin::CreateInstance() {
 
 void PluginImplementer::AwaitClosePermission()
 {
-  TLMErrorLog::Log("Awaiting close permission...");
+  TLMErrorLog::Info("Awaiting close permission...");
   Message.Header.MessageType = TLMMessageTypeConst::TLM_CLOSE_REQUEST;
+#ifdef NAMED_PIPES
+  Message.Pipe = ClientComm.GetPipeToMst();
+#endif
   TLMCommUtil::SendMessage(Message);
+#ifdef NAMED_PIPES
+    Message.Pipe = ClientComm.GetPipeFromMst();
+#endif
   while(Message.Header.MessageType != TLMMessageTypeConst::TLM_CLOSE_PERMISSION) {
     TLMCommUtil::ReceiveMessage(Message);
   }
-  TLMErrorLog::Log("Close permission received.");
+  TLMErrorLog::Info("Close permission received.");
 }
 
 void PluginImplementer::SetInitialForce3D(int interfaceID, double f1, double f2, double f3, double t1, double t2, double t3)
@@ -115,7 +121,7 @@ void PluginImplementer::HandleSignal(int signum) {
         TLMCommUtil::SendMessage(Message);
     }
 
-    TLMErrorLog::Log("Got signal " + TLMErrorLog::ToStdStr(signum));
+    TLMErrorLog::Info("Got signal " + TLMErrorLog::ToStdStr(signum));
 }
 
 void PluginImplementer::CheckModel() {
@@ -125,12 +131,18 @@ void PluginImplementer::CheckModel() {
     }
 
     Message.Header.MessageType =  TLMMessageTypeConst::TLM_CHECK_MODEL;
-
+#ifdef NAMED_PIPES
+    Message.Pipe = ClientComm.GetPipeToMst();
+    TLMCommUtil::SendMessage(Message);
+    Message.Pipe = ClientComm.GetPipeFromMst();
+    while(!TLMCommUtil::ReceiveMessage(Message)) {};
+#else
     TLMCommUtil::SendMessage(Message);
     TLMCommUtil::ReceiveMessage(Message);
+#endif
 
-    if(! Message.Header.TLMInterfaceID) {
-        TLMErrorLog::Log("Error detected on TLM manager while checking meta model");
+    if(Message.Header.TLMInterfaceID < 0) {
+        TLMErrorLog::Info("Error detected on TLM manager while checking meta model");
         TLMErrorLog::FatalError("Header id is " + TLMErrorLog::ToStdStr(int(Message.Header.TLMInterfaceID)));
     }
 
@@ -149,6 +161,14 @@ bool PluginImplementer::Init(std::string model,
                               std::string ServerName) {
     if(Connected) return true;
 
+    TLMErrorLog::Debug("Debug 1");
+
+#ifdef NAMED_PIPES
+    ClientComm.InitializeNamedPipes(model);
+#endif
+
+    TLMErrorLog::Debug("Debug 2");
+
     string::size_type colPos = ServerName.rfind(':');
 
     if(colPos == string::npos) {
@@ -165,13 +185,20 @@ bool PluginImplementer::Init(std::string model,
         return false;
     }
 
-    TLMErrorLog::Log("Sending Component registration request");
+    TLMErrorLog::Info("Sending Component registration request");
 
+#ifdef NAMED_PIPES
+    Message.Pipe = ClientComm.GetPipeToMst();
+#endif
     ClientComm.CreateComponentRegMessage(model, Message);
     TLMCommUtil::SendMessage(Message);
+#ifdef NAMED_PIPES
+    Message.Pipe = ClientComm.GetPipeFromMst();
+    while(!TLMCommUtil::ReceiveMessage(Message)) {}
+#else
     TLMCommUtil::ReceiveMessage(Message);
-
-    TLMErrorLog::Log(string("Got component ID: ") +
+#endif
+    TLMErrorLog::Info(string("Got component ID: ") +
                      TLMErrorLog::ToStdStr(Message.Header.TLMInterfaceID));
 
     StartTime = timeStart;
@@ -190,23 +217,23 @@ bool PluginImplementer::Init(std::string model,
 // the interface is not connected in the CompositeModel.
 int  PluginImplementer::RegisteTLMInterface(std::string name , int dimensions,
                                             std::string causality, std::string domain) {
-    TLMErrorLog::Log(string("Register Interface ") + name);
+    TLMErrorLog::Info(string("Register Interface ") + name);
 
     TLMInterface *ifc;
     if(dimensions==6) {
-        TLMErrorLog::Log("Registers TLM interface of type 3D");
+        TLMErrorLog::Info("Registers TLM interface of type 3D");
         ifc = new TLMInterface3D(ClientComm, name, StartTime, domain);
     }
     else if(dimensions == 1 && causality == "Bidirectional") {
-        TLMErrorLog::Log("Registers TLM interface of type 1D");
+        TLMErrorLog::Info("Registers TLM interface of type 1D");
         ifc = new TLMInterface1D(ClientComm, name, StartTime, domain);
     }
     else if(dimensions == 1 && causality == "Input") {
-        TLMErrorLog::Log("Registers TLM interface of type SignalInput");
+        TLMErrorLog::Info("Registers TLM interface of type SignalInput");
         ifc = new TLMInterfaceInput(ClientComm, name, StartTime, domain);
     }
     else if(dimensions == 1 && causality == "Output") {
-        TLMErrorLog::Log("Registers TLM interface of type SignalOutput");
+        TLMErrorLog::Info("Registers TLM interface of type SignalOutput");
         ifc = new TLMInterfaceOutput(ClientComm, name, StartTime, domain);
     }
     else {
@@ -215,7 +242,7 @@ int  PluginImplementer::RegisteTLMInterface(std::string name , int dimensions,
 
     int id = ifc->GetInterfaceID();
 
-    TLMErrorLog::Log(string("Got interface ID: ") + TLMErrorLog::ToStdStr(id));
+    TLMErrorLog::Info(string("Got interface ID: ") + TLMErrorLog::ToStdStr(id));
 
     // Check that this interface is connected
     if(id < 0) {
@@ -240,7 +267,7 @@ int PluginImplementer::RegisterComponentParameter(std::string name, std::string 
 
     int id = par->GetParameterID();
 
-    TLMErrorLog::Log(string("Got parameter ID: ") + TLMErrorLog::ToStdStr(id));
+    TLMErrorLog::Info(string("Got parameter ID: ") + TLMErrorLog::ToStdStr(id));
 
     // The index of the new interface:
     int idx = Parameters.size();
@@ -264,15 +291,15 @@ void PluginImplementer::ReceiveTimeData(TLMInterface* reqIfc, double time) {
     while(time > reqIfc->GetNextRecvTime()) { // while data is needed
 
         // Receive data untill there is info for this interface
-        string mess("Interface ");
-        TLMErrorLog::Log(mess + reqIfc->GetName() +
-                         " needs data for time= " + TLMErrorLog::ToStdStr(time));
+        if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+           TLMErrorLog::Info("Interface " + reqIfc->GetName() +
+                            " needs data for time= " + TLMErrorLog::ToStdStr(time));
+        }
 
         double allowedMaxTime = reqIfc->GetLastSendTime() + reqIfc->GetConnParams().Delay;
 
         if(allowedMaxTime < time && reqIfc->GetCausality() != "Input") {            //Why not for signal interfaces?
-            string mess("WARNING: Interface ");
-            TLMErrorLog::Log(mess + reqIfc->GetName() +
+            TLMErrorLog::Warning("Interface " + reqIfc->GetName() +
                              " is NOT ALLOWED to ask data after time= " + TLMErrorLog::ToStdStr(allowedMaxTime) +
                              ". The error is: "+TLMErrorLog::ToStdStr(time - allowedMaxTime));
             break;
@@ -280,12 +307,19 @@ void PluginImplementer::ReceiveTimeData(TLMInterface* reqIfc, double time) {
 
         TLMInterface* ifc = NULL;
 
+#ifdef NAMED_PIPES
+        Message.Pipe = ClientComm.GetPipeFromMst();
+#endif
+
         do {
 
             // Receive a message
+#ifdef NAMED_PIPES
+            while(!TLMCommUtil::ReceiveMessage(Message)) { }
+#else
             if(!TLMCommUtil::ReceiveMessage(Message)) // on error leave this loop and use extrapolation
                 break;
-
+#endif
             // Get the target ID
             int id = Message.Header.TLMInterfaceID;
 
@@ -297,15 +331,19 @@ void PluginImplementer::ReceiveTimeData(TLMInterface* reqIfc, double time) {
             ifc->UnpackTimeData(Message);
 
             // Received data
-            TLMErrorLog::Log(string("Interface ") + ifc->GetName() + " got data until time= "
-                             + TLMErrorLog::ToStdStr(ifc->GetNextRecvTime()));
+            if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+                TLMErrorLog::Info(string("Interface ") + ifc->GetName() + " got data until time= " +
+                                 TLMErrorLog::ToStdStr(ifc->GetNextRecvTime()));
+            }
 
         } while(ifc != reqIfc); // loop until a message for this interface arrives
 
         if(ifc == NULL) break; // receive error - breaking
 
-        TLMErrorLog::Log(string("Got data until time=") +
-                         TLMErrorLog::ToStdStr(ifc->GetNextRecvTime()));
+        if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+            TLMErrorLog::Info(string("Got data until time=") +
+                             TLMErrorLog::ToStdStr(ifc->GetNextRecvTime()));
+        }
     }
 }
 
@@ -419,7 +457,7 @@ void PluginImplementer::SetMotion3D(int forceID,
 
     if(!ifc->waitForShutdown()) {
         // Store the data into the interface object
-        TLMErrorLog::Log(string("calling SetTimeData()"));
+        TLMErrorLog::Info(string("calling SetTimeData()"));
         ifc->SetTimeData(time, position, orientation,speed,ang_speed);
     }
     else {
@@ -435,7 +473,7 @@ void PluginImplementer::SetMotion3D(int forceID,
         // needed anything ?
 #endif
 
-        TLMErrorLog::Log(string("Takedown due to finished interface data request."));
+        TLMErrorLog::Info(string("Takedown due to finished interface data request."));
 
         // If we got here, we have a shutdown request from all interfaces
         //abort(); // Some systems don't handle exit() very well, let's try abort();
@@ -459,7 +497,7 @@ void PluginImplementer::SetValueSignal(int valueID,
 
     if(!ifc->waitForShutdown()) {
         // Store the data into the interface object
-        TLMErrorLog::Log(string("calling SetTimeData()"));
+        TLMErrorLog::Info(string("calling SetTimeData()"));
         ifc->SetTimeData(time, value);
     }
     else {
@@ -475,7 +513,9 @@ void PluginImplementer::SetValueSignal(int valueID,
         // needed anything ?
 #endif
 
-        TLMErrorLog::Log(string("Takedown due to finished interface data request."));
+        TLMErrorLog::Info(string("Takedown due to finished interface data request."));
+
+        AwaitClosePermission();
 
         // If we got here, we have a shutdown request from all interfaces
         //abort(); // Some systems don't handle exit() very well, let's try abort();
@@ -498,7 +538,9 @@ void PluginImplementer::SetMotion1D(int forceID,
 
     if(!ifc->waitForShutdown()) {
         // Store the data into the interface object
-        TLMErrorLog::Log(string("calling SetTimeData()"));
+        if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+            TLMErrorLog::Info(string("calling SetTimeData()"));
+        }
         ifc->SetTimeData(time, position, speed);
     }
     else {
@@ -514,7 +556,7 @@ void PluginImplementer::SetMotion1D(int forceID,
         // needed anything ?
 #endif     
 
-        TLMErrorLog::Log(string("Takedown due to finished interface data request."));
+        TLMErrorLog::Info(string("Takedown due to finished interface data request."));
 
         // If we got here, we have a shutdown request from all interfaces
         //abort(); // Some systems don't handle exit() very well, let's try abort();

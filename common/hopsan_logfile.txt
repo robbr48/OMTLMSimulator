@@ -1,0 +1,6 @@
+This file logs the actions done by HopsanCore,
+to trace a program crash one can see what was the last logged action.
+Look at the last rows in this file.
+
+
+

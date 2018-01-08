@@ -47,6 +47,8 @@ public:
                double timeEnd,
                double maxStep,
                std::string ServerName);
+
+    void ReportMonitorReady();
 };
 
 #endif // MONITORINGPLUGINIMPLEMENTER_H

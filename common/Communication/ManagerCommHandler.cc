@@ -92,10 +92,55 @@ void ManagerCommHandler::RunStartupProtocol() {
     // Update the meta-model with the selected server port.
     TheModel.GetSimParams().SetPort(Comm.GetServerPort());
     
+#ifdef NAMED_PIPES
+    //Initialize named pipes
+    TLMErrorLog::Info("-----  Creating named pipes  ----- ");
+    for(int iSock =  TheModel.GetComponentsNum() - 1; iSock >= 0; --iSock) {
+      TLMComponentProxy& comp =  TheModel.GetTLMComponentProxy(iSock);
+      std::string PipeFromMstName = "/tmp/omtlmsimulator_"+comp.GetName()+"_to_mst";
+      std::string PipeToMstName = "/tmp/omtlmsimulator_mst_to_"+comp.GetName();
+
+      mkfifo(PipeFromMstName.c_str(),
+                        S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+
+      mkfifo(PipeToMstName.c_str(),
+                        S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+    }
+#endif
+
     // Start the external components forming "coupled simulation"
     TheModel.StartComponents();
 
-    TLMErrorLog::Log("-----  Waiting for registration requests  ----- ");
+#ifdef NAMED_PIPES
+    //Initialize named pipes
+    TLMErrorLog::Info("-----  Opening named pipes  ----- ");
+    for(int iSock =  TheModel.GetComponentsNum() - 1; iSock >= 0; --iSock) {
+      TLMComponentProxy& comp =  TheModel.GetTLMComponentProxy(iSock);
+
+      std::string PipeToMstName = "/tmp/omtlmsimulator_"+comp.GetName()+"_to_mst";
+      std::string PipeFromMstName = "/tmp/omtlmsimulator_mst_to_"+comp.GetName();
+
+      int PipeToMst, PipeFromMst;
+
+      TLMErrorLog::Debug("Opening pipe: "+PipeToMstName+" (O_RDONLY)");
+      if ((PipeToMst = open(PipeToMstName.c_str(), O_RDONLY)) < 0) {
+          TLMErrorLog::FatalError(strerror(errno));
+      }
+
+      TLMErrorLog::Debug("Opening pipe: "+PipeFromMstName+" (O_WRONLY)");
+      if ((PipeFromMst = open(PipeFromMstName.c_str(), O_WRONLY)) < 0) {
+          TLMErrorLog::FatalError(strerror(errno));
+      }
+
+      TLMErrorLog::Debug("Making pipes non-blocking...");
+      fcntl(PipeFromMst, F_SETFL, O_NONBLOCK);
+      fcntl(PipeToMst, F_SETFL, O_NONBLOCK);
+
+      comp.SetNamedPipes(PipeFromMst, PipeToMst);
+    }
+#endif
+
+    TLMErrorLog::Info("-----  Waiting for registration requests  ----- ");
     Comm.AddActiveSocket(acceptSocket);
     
     // Setup timer
@@ -104,8 +149,17 @@ void ManagerCommHandler::RunStartupProtocol() {
     TM_Start(&tInfo);
 
     while((numToRegister > 0) || (numCheckModel < TheModel.GetComponentsNum())) {
+        TLMErrorLog::Debug("Debug: Rödbetssallad: "+
+                           std::to_string(numToRegister)+
+                           ", "+
+                           std::to_string(numCheckModel));
+
+#ifndef NAMED_PIPES
         Comm.SelectReadSocket();
+#endif
         
+        TLMErrorLog::Debug("Påskhare.");
+
         // Check for timeout.
         TM_Stop(&tInfo);
         if(tInfo.total.tv_sec > TheModel.GetSimParams().GetTimeout()) {
@@ -119,44 +173,55 @@ void ManagerCommHandler::RunStartupProtocol() {
         // Restart is needed for correct time accumulation.
         TM_Start(&tInfo);
         
-        TLMErrorLog::Log("Communicating with clients...");
+        TLMErrorLog::Info("Communicating with clients...");
         
         Comm.ClearActiveSockets();
         // Check all the components for interface registration messages
         for(int iSock =  TheModel.GetComponentsNum() - 1; iSock >= 0; --iSock) {
+            TLMErrorLog::Debug("iSock = "+std::to_string(iSock));
+
             TLMComponentProxy& comp =  TheModel.GetTLMComponentProxy(iSock);
             int hdl = comp.GetSocketHandle();
+
             // The component needs to be connected to a socket
             if(hdl < 0) continue;
+
             // The component needs to be is startup mode, not waiting for check mode
             if(comp.GetReadyToSim()) continue;
 
             // There is data waiting
+#ifndef NAMED_PIPES
             if(!Comm.HasData(hdl)) {
                 Comm.AddActiveSocket(hdl); // expect more messages
                 continue;
             }
+#endif
 
             TLMMessage* message = MessageQueue.GetReadSlot();
+            #ifdef NAMED_PIPES
+                message->Pipe = comp.GetPipeToMst();
+            #endif
             message->SocketHandle = hdl;
-            TLMCommUtil::ReceiveMessage(*message);
+            if(!TLMCommUtil::ReceiveMessage(*message)) {
+                continue;
+            }
 
             if(message->Header.MessageType ==  TLMMessageTypeConst::TLM_CHECK_MODEL) {
                 // This component is done with registration. It's will wait for others
-                TLMErrorLog::Log(string("Component ") + comp.GetName() + " is ready to simulation");;
+                TLMErrorLog::Info(string("Component ") + comp.GetName() + " is ready to simulation");;
 
                 comp.SetReadyToSim();
                 numCheckModel++;
             }
             else if(message->Header.MessageType == TLMMessageTypeConst::TLM_REG_PARAMETER) {
-                TLMErrorLog::Log(string("Component ") + comp.GetName() + " registers parameter");
+                TLMErrorLog::Info(string("Component ") + comp.GetName() + " registers parameter");
 
                 Comm.AddActiveSocket(hdl);
                 ProcessRegParameterMessage(iSock, *message);
                 MessageQueue.PutWriteSlot(message);
             }
             else {
-                TLMErrorLog::Log(string("Component ") + comp.GetName() + " registers interface");;
+                TLMErrorLog::Info(string("Component ") + comp.GetName() + " registers interface");;
 
                 Comm.AddActiveSocket(hdl); // expect more messages
                 ProcessRegInterfaceMessage(iSock, *message);
@@ -164,8 +229,19 @@ void ManagerCommHandler::RunStartupProtocol() {
             }
         }
 
+        TLMErrorLog::Debug("Debug Julskinka");
+
         // Check if a new connection is waiting to be accepted.
+#ifdef NAMED_PIPES
+        for(int c =  TheModel.GetComponentsNum() - 1; c >= 0; --c) {
+            TLMComponentProxy& comp = TheModel.GetTLMComponentProxy(c);
+
+            TLMErrorLog::Debug("Debug Janssons: "+comp.GetName());
+
+            if(comp.GetSocketHandle() > 0) continue;
+#else
         if((numToRegister > 0) && Comm.HasData(acceptSocket)) {
+#endif
             int hdl = Comm.AcceptComponentConnections();
             // WARNING!!! This is potentially a problematic case
             // since I immediately try to receive a message from just accepted connection
@@ -174,19 +250,33 @@ void ManagerCommHandler::RunStartupProtocol() {
             // with any component to a separate place and "select" on them once more.
             // Might be necessary to fix later.
 
+            TLMErrorLog::Debug("Kattunge");
+
             TLMMessage* message = MessageQueue.GetReadSlot();
+
+            TLMErrorLog::Debug("Föl");
+
             message->SocketHandle = hdl;
+#ifdef NAMED_PIPES
+            message->Pipe = comp.GetPipeToMst();
+
+            TLMErrorLog::Debug("Fiskyngel");
+
+            if(!TLMCommUtil::ReceiveMessage(*message)) {
+                continue;
+            }
+#else
             if(!TLMCommUtil::ReceiveMessage(*message)) {
                 TLMErrorLog::FatalError("Failed to get message, exiting");
                 abort();
             }
-
+#endif
             ProcessRegComponentMessage(*message);
 
             MessageQueue.PutWriteSlot(message);
             numToRegister --;
             if(numToRegister == 0)
-                TLMErrorLog::Log("All expected components are registered");
+                TLMErrorLog::Info("All expected components are registered");
 
             Comm.AddActiveSocket(hdl);
         }
@@ -194,6 +284,7 @@ void ManagerCommHandler::RunStartupProtocol() {
         if(numToRegister)  // still more connections expected
             Comm.AddActiveSocket(acceptSocket);
         
+        TLMErrorLog::Debug("Debug: Inlagd sill.");
     }
 }
 
@@ -218,13 +309,20 @@ void ManagerCommHandler::ProcessRegComponentMessage(TLMMessage& mess) {
 
     TLMComponentProxy& comp = TheModel.GetTLMComponentProxy(CompID);
 
+#ifdef NAMED_PIPES
+    comp.SetSocketHandle(1);
+#else
     comp.SetSocketHandle(mess.SocketHandle);
+#endif
 
     mess.Header.DataSize = 0;
 
     mess.Header.TLMInterfaceID = CompID;
+#ifdef NAMED_PIPES
+    mess.Pipe = comp.GetPipeFromMst();
+#endif
     
-    TLMErrorLog::Log(string("Component ") + aName + " is connected");
+    TLMErrorLog::Info(string("Component ") + aName + " is connected");
 
 }
 
@@ -243,7 +341,7 @@ void ManagerCommHandler::ProcessRegInterfaceMessage(int compID, TLMMessage& mess
     // First, find the interface in the meta model
     string aSpecification ((const char*)(& mess.Data[0]), mess.Header.DataSize);
 
-    TLMErrorLog::Log("Manager received nameAndType: "+aSpecification);
+    TLMErrorLog::Info("Manager received nameAndType: "+aSpecification);
 
     string aName, dimStr, causality, domain;
     if(aSpecification.find(':') == std::string::npos) {     //This is for backwards compatibility with BEAST.
@@ -319,17 +417,21 @@ void ManagerCommHandler::ProcessRegInterfaceMessage(int compID, TLMMessage& mess
         return;
     }
 
+#ifdef NAMED_PIPES
+    mess.Pipe = TheModel.GetTLMComponentProxy(compID).GetPipeFromMst();
+#endif
+
     if(CommMode == CoSimulationMode) {
         SetupInterfaceConnectionMessage(IfcID, aName, mess);
     }
     else if(CommMode == InterfaceRequestMode) {
         
-        TLMErrorLog::Log(string("Register TLM interface ") +
+        TLMErrorLog::Info(string("Register TLM interface ") +
                          TheModel.GetTLMComponentProxy(compID).GetName() + '.' + aName);
         
         std::stringstream ss;
         ss << "Assigning interface ID = " << IfcID;
-        TLMErrorLog::Log(ss.str());
+        TLMErrorLog::Info(ss.str());
         mess.Header.TLMInterfaceID = IfcID;
         
         TLMInterfaceProxy& ifc = TheModel.GetTLMInterfaceProxy(IfcID);
@@ -353,7 +455,7 @@ void ManagerCommHandler::ProcessRegParameterMessage(int compID, TLMMessage &mess
     // First, find the interface in the meta model
     string aNameAndValue((const char*)(& mess.Data[0]), mess.Header.DataSize);
 
-    TLMErrorLog::Log("Manager received nameAndValue: "+aNameAndValue);
+    TLMErrorLog::Info("Manager received nameAndValue: "+aNameAndValue);
 
     string aName, aValue;
     bool readingName=true;
@@ -391,13 +493,16 @@ void ManagerCommHandler::ProcessRegParameterMessage(int compID, TLMMessage &mess
 
     std::stringstream ss;
     ss << "Assigning parameter ID = " << ParID;
-    TLMErrorLog::Log(ss.str());
+    TLMErrorLog::Info(ss.str());
 
     mess.Header.ComponentParameterID = ParID;
 
     char ValueBuf[100];
     sprintf(ValueBuf, "%.99s", TheModel.GetComponentParameterProxy(ParID).GetValue().c_str());
     mess.Header.DataSize = sizeof(ValueBuf);
+#ifdef NAMED_PIPES
+    mess.Pipe = TheModel.GetTLMComponentProxy(compID).GetPipeFromMst();
+#endif
     mess.Data.resize(sizeof(TLMConnectionParams));
     memcpy(& mess.Data[0], &ValueBuf, mess.Header.DataSize);
 }
@@ -416,7 +521,7 @@ void ManagerCommHandler::SetupInterfaceConnectionMessage(int IfcID, std::string&
         return;
     }
 
-    TLMErrorLog::Log(string("Interface ") + aName + " is connected");
+    TLMErrorLog::Info(string("Interface ") + aName + " is connected");
 
     // Put connection parameters in the reply
     TLMConnection& conn = TheModel.GetTLMConnection(connID);
@@ -473,11 +578,18 @@ void ManagerCommHandler::SetupInterfaceRequestMessage(TLMMessage& mess) {
 void ManagerCommHandler::ReaderThreadRun() {
 
     // Handle start-up
+    TLMErrorLog::Info("Running startup protocol...");
     RunStartupProtocol();
+    TLMErrorLog::Info("Finished startup protocol.");
 
     // Check that startup completed correctly
     int StartupOK = TheModel.CheckProxyComm();
     
+    // First wait until monitor is ready
+    while(!MonitorConnected) {
+        usleep(10000);
+    }
+
     // Send the status result to all components
     for(int iSock =  TheModel.GetComponentsNum() - 1; iSock >= 0; --iSock) {
         int hdl = TheModel.GetTLMComponentProxy(iSock).GetSocketHandle();
@@ -486,6 +598,9 @@ void ManagerCommHandler::ReaderThreadRun() {
         message->Header.MessageType = TLMMessageTypeConst::TLM_CHECK_MODEL;
         message->Header.DataSize = 0;
         message->Header.TLMInterfaceID = StartupOK;
+#ifdef NAMED_PIPES
+        message->Pipe = TheModel.GetTLMComponentProxy(iSock).GetPipeFromMst();
+#endif
         MessageQueue.PutWriteSlot(message);
     }
 
@@ -494,7 +609,7 @@ void ManagerCommHandler::ReaderThreadRun() {
         return;
     }
 
-    TLMErrorLog::Log("------------------  Starting time data exchange   ------------------");
+    TLMErrorLog::Info("------------------  Starting time data exchange   ------------------");
     
     Comm.SwitchToRunningMode();
     runningMode = RunMode;
@@ -502,24 +617,36 @@ void ManagerCommHandler::ReaderThreadRun() {
     int nClosedSock = 0;
     std::vector<int> closedSockets;
     while(nClosedSock < TheModel.GetComponentsNum()) {
+        TLMErrorLog::Debug("nClosedSock = "+std::to_string(nClosedSock));
         Comm.SelectReadSocket(); // wait for a change
 
         for(int iSock =  TheModel.GetComponentsNum() - 1; iSock >= 0; --iSock) {
             TLMComponentProxy& comp = TheModel.GetTLMComponentProxy(iSock);
             int hdl = comp.GetSocketHandle();
 
+#ifdef NAMED_PIPES
+            if((std::find(closedSockets.begin(), closedSockets.end(), iSock) == closedSockets.end())
+               && (hdl != 0)) { // there is data to be received on the socket
+              TLMErrorLog::Debug("Reading from model "+comp.GetName());
+#else
             if((std::find(closedSockets.begin(), closedSockets.end(), iSock) == closedSockets.end())
                && (hdl != 0) && Comm.HasData(hdl)) { // there is data to be received on the socket
+#endif
 
                 TLMMessage* message = MessageQueue.GetReadSlot();
                 message->SocketHandle = hdl;
+#ifdef NAMED_PIPES
+                message->Pipe = comp.GetPipeToMst();
+#endif
                 if(TLMCommUtil::ReceiveMessage(*message)) {
+                    TLMErrorLog::Debug("Received a message.");
                     if(message->Header.MessageType == TLMMessageTypeConst::TLM_CLOSE_REQUEST) {
-                        TLMErrorLog::Log("Received close permission request from "+comp.GetName());
+                        TLMErrorLog::Info("Received close permission request from "+comp.GetName());
                         closedSockets.push_back(iSock);
                         nClosedSock++;
                     }
                     else if(CommMode == CoSimulationMode) {
+                        TLMErrorLog::Debug("Köttbullar.");
                         MarshalMessage(*message);
 
                         // Forward message for monitoring.
@@ -535,33 +662,45 @@ void ManagerCommHandler::ReaderThreadRun() {
                 }
                 else {
                     //Socket was closed without permission
+#ifndef NAMED_PIPES
                     nClosedSock++;
+                    TLMErrorLog::Info("nCLosedSock = " +std::to_string(nClosedSock));
+#else
+                    TLMErrorLog::Debug("No data to read.");
+#endif
                 }
             }
         }
     }
 
-    TLMErrorLog::Log("Simulation complete.");
+    TLMErrorLog::Info("Simulation complete.");
 
     for(int i=0; i<closedSockets.size(); ++i) {
       int iSock = closedSockets.at(i);
       TLMMessage message;
       TLMComponentProxy& comp = TheModel.GetTLMComponentProxy(iSock);
+
+#ifdef NAMED_PIPES
+      message.Pipe = comp.GetPipeFromMst();
+#else
       int hdl = comp.GetSocketHandle();
       message.SocketHandle = hdl;
+#endif
 
-      TLMErrorLog::Log("Sending close permission to "+comp.GetName());
+      TLMErrorLog::Info("Sending close permission to "+comp.GetName());
 
       message.Header.MessageType = TLMMessageTypeConst::TLM_CLOSE_PERMISSION;
       TLMCommUtil::SendMessage(message);
 
+#ifndef NAMED_PIPES
       Comm.DropActiveSocket(hdl);
       comp.SetSocketHandle(-1);
+#endif
 
-      TLMErrorLog::Log(string("Connection to component ") + comp.GetName() + " is closed");
+      TLMErrorLog::Info(string("Connection to component ") + comp.GetName() + " is closed");
     }
 
-    TLMErrorLog::Log("All sockets are closed.");
+    TLMErrorLog::Info("All sockets are closed.");
     runningMode = ShutdownMode;
     MessageQueue.Terminate();
 
@@ -571,7 +710,7 @@ void ManagerCommHandler::ReaderThreadRun() {
 void ManagerCommHandler::WriterThreadRun() {
 
     TLMMessage* tlm_mess = 0;
-    TLMErrorLog::Log(string("TLM manager is ready to send messages"));
+    TLMErrorLog::Info(string("TLM manager is ready to send messages"));
 
     while((tlm_mess = MessageQueue.GetWriteSlot()) != NULL) {
         TLMCommUtil::SendMessage(*tlm_mess);
@@ -588,7 +727,7 @@ void ManagerCommHandler::MarshalMessage(TLMMessage& message) {
   TLMInterfaceProxy& src = TheModel.GetTLMInterfaceProxy(message.Header.TLMInterfaceID);
 
   if(message.Header.MessageType !=   TLMMessageTypeConst::TLM_TIME_DATA) {
-        TLMErrorLog::Log("Interface ID: "+TLMErrorLog::ToStdStr(message.Header.TLMInterfaceID));
+        TLMErrorLog::Info("Interface ID: "+TLMErrorLog::ToStdStr(message.Header.TLMInterfaceID));
         TLMErrorLog::FatalError("Unexpected message received from "+
                                 TheModel.GetTLMComponentProxy(src.GetComponentID()).GetName()+
                                 "."+src.GetName()+
@@ -607,10 +746,13 @@ void ManagerCommHandler::MarshalMessage(TLMMessage& message) {
         TLMInterfaceProxy& dest = TheModel.GetTLMInterfaceProxy(destID);
         TLMComponentProxy& destComp = TheModel.GetTLMComponentProxy(dest.GetComponentID());
         message.SocketHandle = destComp.GetSocketHandle();
+#ifdef NAMED_PIPES
+        message.Pipe = destComp.GetPipeFromMst();
+#endif
         message.Header.TLMInterfaceID = destID;
 
-        if(TLMErrorLog::LogEnabled()) {
-            TLMErrorLog::Log(string("Forwarding from " +
+        if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+            TLMErrorLog::Info(string("Forwarding from " +
                                     TheModel.GetTLMComponentProxy(src.GetComponentID()).GetName() + '.'+
                                     src.GetName()
                                     + " to " + destComp.GetName() + '.' + dest.GetName()));
@@ -622,7 +764,7 @@ void ManagerCommHandler::UnpackAndStoreTimeData(TLMMessage& message) {
     if(message.Header.MessageType !=   TLMMessageTypeConst::TLM_TIME_DATA) {
         std::stringstream ss;
         ss << "Message type = " << int(message.Header.MessageType);
-        TLMErrorLog::Log(ss.str());
+        TLMErrorLog::Info(ss.str());
         TLMErrorLog::FatalError("Unexpected message received in ManagerCommHandler::UnpackAndStoreTimeData(...)");
     }
 
@@ -642,7 +784,7 @@ void ManagerCommHandler::UnpackAndStoreTimeData(TLMMessage& message) {
         // forward the time data
         TLMTimeData3D& data = ip.getTime0Data3D();
 
-        TLMErrorLog::Log("Unpack and store 3D time data for " + ip.GetName());
+        TLMErrorLog::Info("Unpack and store 3D time data for " + ip.GetName());
         data = *Next;
     }
     else if(ip.GetDimensions() == 1 && ip.GetCausality() == "Bidirectional") {
@@ -659,7 +801,7 @@ void ManagerCommHandler::UnpackAndStoreTimeData(TLMMessage& message) {
         // forward the time data
         TLMTimeData3D& data = ip.getTime0Data3D();
 
-        TLMErrorLog::Log("Unpack and store 1D time data for " + ip.GetName());
+        TLMErrorLog::Info("Unpack and store 1D time data for " + ip.GetName());
 
         data.Position[0] = Next->Position; data.Position[1] = 0;   data.Position[2] = 0;
 
@@ -684,7 +826,7 @@ void ManagerCommHandler::UnpackAndStoreTimeData(TLMMessage& message) {
         // forward the time data
         TLMTimeData3D& data = ip.getTime0Data3D();
 
-        TLMErrorLog::Log("Unpack and store signal time data for " + ip.GetName());
+        TLMErrorLog::Info("Unpack and store signal time data for " + ip.GetName());
 
         data.Position[0] = 1;   data.Position[1] = 0;   data.Position[2] = 0;
 
@@ -719,7 +861,7 @@ int ManagerCommHandler::ProcessInterfaceMonitoringMessage(TLMMessage& message) {
         }
     }
 
-    TLMErrorLog::Log("Request for monitoring " + aName);
+    TLMErrorLog::Info("Request for monitoring " + aName);
 
     // Here the full name, i.e., component.interface, is requered
     int IfcID = TheModel.GetTLMInterfaceID(aName);
@@ -759,29 +901,46 @@ void ManagerCommHandler::ForwardToMonitor(TLMMessage& message) {
     // We forward to the sender!
     TLMInterfaceProxy& ifc = TheModel.GetTLMInterfaceProxy(message.Header.TLMInterfaceID);
     int TLMInterfaceID = ifc.GetLinkedID();
-    
+#ifdef NAMED_PIPES
+    if(true) {
+#else
     if(monitorInterfaceMap.count(TLMInterfaceID) > 0) {
+#endif
 
         if(message.Header.MessageType != TLMMessageTypeConst::TLM_TIME_DATA) {
             TLMErrorLog::FatalError("Unexpected message received in forward to monitor");
         }
 
         // Forward to all connected monitoring ports
+#ifndef NAMED_PIPES
         multimap<int,int>::iterator pos;
         for(pos = monitorInterfaceMap.lower_bound(TLMInterfaceID);
              pos != monitorInterfaceMap.upper_bound(TLMInterfaceID);
              pos++) {
+#endif
+        if(true) {
             
-            if(TLMErrorLog::IsNormalErrorLogOn()) {
-                TLMErrorLog::Log("Forwarding to monitor, interface " + TLMErrorLog::ToStdStr(TLMInterfaceID)
+#ifdef NAMED_PIPES
+          if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+              TLMErrorLog::Info("Forwarding to monitor, interface " + TLMErrorLog::ToStdStr(TLMInterfaceID));
+          }
+#else
+            if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+                TLMErrorLog::Info("Forwarding to monitor, interface " + TLMErrorLog::ToStdStr(TLMInterfaceID)
                                   + " on socket " + TLMErrorLog::ToStdStr(pos->second));
             }
             
             int hdl = pos->second;
+#endif
             
             TLMMessage* newMessage = MessageQueue.GetReadSlot();
 
+#ifdef NAMED_PIPES
+            newMessage->Pipe = MstToMonitorPipe;
+#else
             newMessage->SocketHandle = hdl;
+#endif
+
             memcpy(&newMessage->Header, &message.Header, sizeof(TLMMessageHeader));
             newMessage->Header.TLMInterfaceID = TLMInterfaceID;
 
@@ -794,8 +953,8 @@ void ManagerCommHandler::ForwardToMonitor(TLMMessage& message) {
         }
     }
     else {
-        if(TLMErrorLog::IsNormalErrorLogOn()) {
-            TLMErrorLog::Log("Nothing to forward for monitor interface " + TLMErrorLog::ToStdStr(TLMInterfaceID));
+        if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+            TLMErrorLog::Info("Nothing to forward for monitor interface " + TLMErrorLog::ToStdStr(TLMInterfaceID));
         }
     }
     monitorMapLock.unlock();
@@ -803,14 +962,37 @@ void ManagerCommHandler::ForwardToMonitor(TLMMessage& message) {
 
 
 void ManagerCommHandler::MonitorThreadRun() {
-    TLMErrorLog::Log("In monitoring");
+    TLMErrorLog::Info("In monitoring");
     
     if(TheModel.GetSimParams().GetMonitorPort() <= 0) {
-        TLMErrorLog::Log("Monitoring disabled!");
+        TLMErrorLog::Info("Monitoring disabled!");
         return;
     }
     
-    TLMErrorLog::Log("Initialize monitoring port");
+#ifdef NAMED_PIPES
+    std::string MstToMonitorPipeName = "/tmp/omtlmsimulator_mst_to_monitor";
+    std::string MonitorToMstPipeName = "/tmp/omtlmsimulator_monitor_to_mst";
+
+    TLMErrorLog::Debug("Creating monitor pipes...");
+    mkfifo(MstToMonitorPipeName.c_str(), S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+    mkfifo(MonitorToMstPipeName.c_str(), S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+
+    TLMErrorLog::Debug("Opening pipe: "+MonitorToMstPipeName+" (O_RDONLY)");
+    if ((MonitorToMstPipe = open(MonitorToMstPipeName.c_str(), O_RDONLY)) < 0) {
+        TLMErrorLog::FatalError(strerror(errno));
+    }
+
+    TLMErrorLog::Debug("Opening pipe: "+MstToMonitorPipeName+" (O_WRONLY)");
+    if ((MstToMonitorPipe = open(MstToMonitorPipeName.c_str(), O_WRONLY)) < 0) {
+        TLMErrorLog::FatalError(strerror(errno));
+    }
+
+    TLMErrorLog::Debug("Making pipes non-blocking...");
+    fcntl(MstToMonitorPipe, F_SETFL, O_NONBLOCK);
+    fcntl(MstToMonitorPipe, F_SETFL, O_NONBLOCK);
+#endif
+
+    TLMErrorLog::Info("Initialize monitoring port");
 
     // Create a connection for max. 10 clients.
     TLMManagerComm monComm(10, TheModel.GetSimParams().GetMonitorPort());
@@ -833,23 +1015,28 @@ void ManagerCommHandler::MonitorThreadRun() {
     // Never switch to running mode but use active sockets instead.
     monComm.AddActiveSocket(acceptSocket);
 
-    TLMErrorLog::Log("Wait for monitoring connections...");
+    TLMErrorLog::Info("Wait for monitoring connections...");
     
     std::vector<int> socks;
 
     std::multimap<int,int> localIntMap;
 
     //assert(runningMode == RunMode);
+#ifdef NAMED_PIPES
+    TLMMessage* message = MessageQueue.GetReadSlot();
+#endif
     while(runningMode != ShutdownMode) {
         int hdl = -1;
 
+#ifndef NAMED_PIPES
         monComm.SelectReadSocket();
-        
+#endif
+
         // Just check if we are in shutdown mode
         if(runningMode == ShutdownMode) break;
-
+#ifndef NAMED_PIPES
         if(monComm.HasData(acceptSocket)) {
-            TLMErrorLog::Log("Got new monitoring connection");
+            TLMErrorLog::Info("Got new monitoring connection");
             hdl = monComm.AcceptComponentConnections();
             if(hdl < 0) {
                 TLMErrorLog::FatalError("Failed to accept socket.");
@@ -862,66 +1049,61 @@ void ManagerCommHandler::MonitorThreadRun() {
         else {
             for(std::vector<int>::iterator it=socks.begin(); it != socks.end(); it++) {
                 if(monComm.HasData(*it)) {
-                    TLMErrorLog::Log("Accepted data on monitoring connection");
+                    TLMErrorLog::Info("Accepted data on monitoring connection");
 
                     hdl = *it;
                     break;
                 }
             }
         }
-
+#endif
         // Just check if we are in shutdown mode
         if(runningMode == ShutdownMode) break;
 
+#ifdef NAMED_PIPES
+        if(1) {
+          message->Pipe = MonitorToMstPipe;
+          while(!TLMCommUtil::ReceiveMessage(*message)) {
+            usleep(1000);
+          }
+#else
         if(hdl >= 0) {
             TLMMessage* message = MessageQueue.GetReadSlot();
             message->SocketHandle = hdl;
-            
+
             if(!TLMCommUtil::ReceiveMessage(*message)) {
                 TLMErrorLog::Warning("Failed to get message from monitor, disconected?");
                 //abort();
                 monComm.DropActiveSocket(hdl);
                 continue;
             }
-            
+#endif
+
             if(message->Header.MessageType ==  TLMMessageTypeConst::TLM_CHECK_MODEL) {
-                TLMErrorLog::Warning("Received unexpected check-model on monitoring interface, try to answer...");
-
-                message->Header.TLMInterfaceID = 1;
-                message->Header.DataSize = 0;
-
+                //TLMErrorLog::Warning("Received unexpected check-model on monitoring interface, try to answer...");
+                message->Pipe = MstToMonitorPipe;
+                message->Header.TLMInterfaceID=1000000; //Used for monitor
                 MessageQueue.PutWriteSlot(message);
+                message = MessageQueue.GetReadSlot();
+                TLMErrorLog::Info("Monitor is ready.");
+                MonitorConnected = true;
             }
             else {
                 int IfcID = ProcessInterfaceMonitoringMessage(*message);
+#ifdef NAMED_PIPES
+                message->Pipe = MstToMonitorPipe;
+#endif
                 MessageQueue.PutWriteSlot(message);
-
+#ifdef NAMED_PIPES
+                message = MessageQueue.GetReadSlot();
+#endif
                 if(IfcID >= 0) {
 
-                    TLMErrorLog::Log("Register monitor handle for interface " + ToStr(IfcID));
-#if 0
-                    //std::cout << "hdl=" << hdl << ", ifID=" << IfcID << std::endl;
-                    localIntMap.insert(std::make_pair(hdl, IfcID));
-                    //std::cout << "hdl count=" << localIntMap.count(hdl) << ", if count=" << TheModel.GetInterfacesNum() << std::endl;
+                    TLMErrorLog::Info("Register monitor handle for interface " + ToStr(IfcID));
 
-                    // NOTE, here we register interfaces first if all interfaces are monitored.
-                    if(localIntMap.count(hdl) == TheModel.GetInterfacesNum()) {
-                        monitorMapLock.lock();
-                        std::multimap<int,int>::iterator it;
-                        for(it = localIntMap.lower_bound(hdl);
-                             it != localIntMap.upper_bound(hdl);
-                             it++) {
-                            monitorInterfaceMap.insert(std::make_pair(it->second, hdl));
-                        }
-                        monitorMapLock.unlock();
-                    }
-                    else {
-                    }
-#else
                     monitorMapLock.lock();
                     monitorInterfaceMap.insert(std::make_pair(IfcID, hdl));
                     monitorMapLock.unlock();
-#endif
 
                 }
             }

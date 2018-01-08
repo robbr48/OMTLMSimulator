@@ -3,6 +3,7 @@
 #include "tostr.h"
 
 #include <string>
+#include <poll.h>
 
 // BZ306: due to this difficulr bug detailed loggning of each send/recv was added.
 // However for performance reasons, i.e. tp
@@ -27,11 +28,36 @@ TLMMessageHeader::TLMMessageHeader():
 
 // Send the TLMMessage pointed by mess via socket with handle SocketHandle
 void TLMCommUtil::SendMessage(TLMMessage& mess) {
+#ifdef NAMED_PIPES
+    int num=-1;
+    while(num<0) {
+        if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Debug) {
+            TLMErrorLog::Debug("Sending header. Type: "+
+                               std::to_string(mess.Header.MessageType)+
+                               ", Pipe: "+
+                               std::to_string(mess.Pipe));
+        }
+        if ((num= write(mess.Pipe, (const char*)&(mess.Header), sizeof(TLMMessageHeader))) < 0) {
+            if(errno != EAGAIN && errno != EBUSY) {
+                TLMErrorLog::FatalError(strerror(errno));
+            }
+        }
+    }
+    if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Debug) {
+        TLMErrorLog::Debug("Sending data...");
+    }
+    if ((num= write(mess.Pipe, (const char*)&(mess.Data[0]), mess.Header.DataSize)) < 0) {
+        TLMErrorLog::FatalError(strerror(errno));
+    }
+    if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Debug) {
+        TLMErrorLog::Debug("Data sent.");
+    }
+#else
 
     int DataSize = mess.Header.DataSize;
 
     if(doDetailedLogging) {
-        TLMErrorLog::Log("SendMessage: wants to send "+
+        TLMErrorLog::Info("SendMessage: wants to send "+
                          Int2Str(sizeof(TLMMessageHeader))+"+"+
                          Int2Str(DataSize)+ " bytes ");
     }
@@ -61,7 +87,7 @@ void TLMCommUtil::SendMessage(TLMMessage& mess) {
 #endif
 
     if(doDetailedLogging) {
-        TLMErrorLog::Log("SendMessage:send() sent "+Int2Str(sendBytes)+ " bytes ");
+        TLMErrorLog::Info("SendMessage:send() sent "+Int2Str(sendBytes)+ " bytes ");
     }
 
     if(DataSize > 0) {
@@ -78,11 +104,11 @@ void TLMCommUtil::SendMessage(TLMMessage& mess) {
 #endif
 
         if(doDetailedLogging) {
-            TLMErrorLog::Log("SendMessage:send()(part 2) sent "+Int2Str(sendBytes)+ " bytes ");
+            TLMErrorLog::Info("SendMessage:send()(part 2) sent "+Int2Str(sendBytes)+ " bytes ");
         }
 
     }
-
+#endif
 
 }
 
@@ -99,6 +125,90 @@ void TLMCommUtil::SendMessage(TLMMessage& mess) {
 // fixes byte order for the message header if necessary.
 // Note that the actual message data is not processed, just received, 
 bool TLMCommUtil::ReceiveMessage(TLMMessage& mess) {
+#ifdef NAMED_PIPES
+
+    pollfd fdarray;
+    fdarray.events = POLLIN;
+    fdarray.fd = mess.Pipe;
+    if(poll(&fdarray,1,0) <= 0) {
+      usleep(20);
+      return false;
+    }
+
+    int num;
+
+    // --- output ---
+    if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Debug) {
+        TLMErrorLog::Debug("Receiving message. Pipe: "+std::to_string(mess.Pipe));
+    }
+    // --------------
+
+    num = read(mess.Pipe, (char*)(&mess.Header), sizeof(TLMMessageHeader));
+    if(num == 0) {
+          return false;
+        }
+    else if(num > 0) {
+
+      // --- output ---
+      if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Debug) {
+        TLMErrorLog::Debug("Received message type: "+std::to_string(mess.Header.MessageType)+
+                           ". Receiving data...");
+      }
+      // --------------
+
+      mess.Data.resize(mess.Header.DataSize);
+      if(mess.Header.DataSize == 0) {
+
+        // --- output ---
+        if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Debug) {
+            TLMErrorLog::Debug("No data to receive.");
+        }
+        // --------------
+
+        return true;
+      }
+      while(true) {
+        if(poll(&fdarray,1,0) <= 0) {
+          usleep(20);
+          continue;
+        }
+
+        num = read(mess.Pipe, (char*)(&mess.Data[0]), mess.Header.DataSize);
+        if (num < 0) {
+          if(errno == EAGAIN || errno == EBUSY) {
+            //usleep(10);
+            continue;
+          }
+          else {
+            TLMErrorLog::FatalError(std::to_string(errno));
+            return false;
+          }
+        }
+        else if(num == 0) {
+          TLMErrorLog::FatalError("Data is missing.");
+          return false;
+        }
+        else if(num > 0) {
+
+          // --- output ---
+          if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Debug) {
+              TLMErrorLog::Debug("Data received.");
+          }
+          // --------------
+
+          return true;
+        }
+      }
+    }
+    else if (num < 0) {
+      if(errno == EAGAIN || errno == EBUSY) {
+        return false;
+      }
+      else {
+        TLMErrorLog::FatalError(std::to_string(errno));
+      }
+    }
+#else
     int bcount = recv(mess.SocketHandle, (char*)(&mess.Header), sizeof(TLMMessageHeader) , MSG_WAITALL);
     while((bcount >= 0) && (bcount <  static_cast<int>(sizeof(TLMMessageHeader)))) {
         // this should never happen, but it does...
@@ -118,14 +228,14 @@ bool TLMCommUtil::ReceiveMessage(TLMMessage& mess) {
         int errcode=WSAGetLastError();
         if(errcode==WSAECONNRESET)
             // This is called by normal termination of BEAST
-            TLMErrorLog::Log("SOCKET_ERROR received, error code ="+Int2Str(errcode));
+            TLMErrorLog::Info("SOCKET_ERROR received, error code ="+Int2Str(errcode));
         else
             TLMErrorLog::Warning("SOCKET_ERROR received, error code ="+Int2Str(errcode));
 #endif
         return false;
     }
     if(doDetailedLogging) {
-        TLMErrorLog::Log("ReceiveMessage:recv() returned "+Int2Str(bcount)+ " bytes ");
+        TLMErrorLog::Info("ReceiveMessage:recv() returned "+Int2Str(bcount)+ " bytes ");
     }
 
     if(strncmp(mess.Header.Signature, TLMMessageHeader::TLMSignature, TLMMessageHeader::TLM_SIGNATURE_LENGTH) != 0) {
@@ -173,13 +283,13 @@ bool TLMCommUtil::ReceiveMessage(TLMMessage& mess) {
             return false;
         }
         if(doDetailedLogging) {
-            TLMErrorLog::Log("ReceiveMessage:recv()(part 2) returned "+Int2Str(bcount)+ " bytes ");
+            TLMErrorLog::Info("ReceiveMessage:recv()(part 2) returned "+Int2Str(bcount)+ " bytes ");
         }
         if(bcount != mess.Header.DataSize) {
             TLMErrorLog::FatalError("Error receiving message data");
         }
     }
-
+#endif
     return true;
 }
 

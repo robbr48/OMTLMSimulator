@@ -12,6 +12,9 @@
 
 #include <vector>
 #include <cstring>
+#ifdef NAMED_PIPES
+#include <poll.h>
+#endif
 
 #include "Communication/TLMCalcData.h"
 
@@ -23,6 +26,9 @@
 
 #else
 
+#ifdef NAMED_PIPES
+#include <unistd.h>
+#endif
 #include  <sys/socket.h>
 #include  <netdb.h>
 #include <netinet/in.h>
@@ -99,6 +105,9 @@ struct TLMMessageHeader {
 struct TLMMessage {
     //! source/destination socket
     int SocketHandle;
+#ifdef NAMED_PIPES
+    int Pipe;
+#endif
 
     //! Message header
     TLMMessageHeader Header;
@@ -122,7 +131,7 @@ class TLMCommUtil {
 public:
 
     //! Empty contructor.
-    TLMCommUtil() {}
+    TLMCommUtil() { }
 
 
     //! The IsBigEndian() function detects if the current hardware
@@ -152,7 +161,6 @@ public:
     //! Note that the actual message data is not processed, just received,
     //! Returns 'true' on success, 'false' if socket is closed, aborts on error.
     static bool ReceiveMessage(TLMMessage& mess);
-
 };
 
 inline void TLMCommUtil::ByteSwap(void * Buff, size_t type_size, size_t items) {

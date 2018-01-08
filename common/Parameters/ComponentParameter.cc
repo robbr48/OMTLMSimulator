@@ -22,10 +22,17 @@ ComponentParameter::ComponentParameter(TLMClientComm& theComm, std::string& aNam
     Comm(theComm) {
     Comm.CreateParameterRegMessage(aName, aDefaultValue, Message);
     Message.SocketHandle = Comm.GetSocketHandle();
+#ifdef NAMED_PIPES
+    Message.Pipe = Comm.GetPipeFromMst();
+#endif
 
     TLMCommUtil::SendMessage(Message);
 
+#ifdef NAMED_PIPES
+    while(!TLMCommUtil::ReceiveMessage(Message));
+#else
     TLMCommUtil::ReceiveMessage(Message);
+#endif
     while(Message.Header.MessageType != TLMMessageTypeConst::TLM_REG_PARAMETER) {
         TLMCommUtil::ReceiveMessage(Message);
     }
@@ -33,7 +40,7 @@ ComponentParameter::ComponentParameter(TLMClientComm& theComm, std::string& aNam
 
     Comm.UnpackRegParameterMessage(Message, Value);
 
-    TLMErrorLog::Log(std::string("Parameter ") + GetName() + " got ID " + TLMErrorLog::ToStdStr(ParameterID));
+    TLMErrorLog::Info(std::string("Parameter ") + GetName() + " got ID " + TLMErrorLog::ToStdStr(ParameterID));
 }
 
 

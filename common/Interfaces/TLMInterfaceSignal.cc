@@ -27,9 +27,14 @@ void TLMInterfaceSignal::UnpackTimeData(TLMMessage &mess) {
 void TLMInterfaceSignal::SendAllData() {
     LastSendTime = DataToSend.back().time;
 
-    TLMErrorLog::Log(std::string("Interface ") + GetName() + " sends data for time= " +
-                     TLMErrorLog::ToStdStr(LastSendTime));
+    if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+        TLMErrorLog::Info(std::string("Interface ") + GetName() + " sends data for time= " +
+                         TLMErrorLog::ToStdStr(LastSendTime));
+    }
 
+#ifdef NAMED_PIPES
+    Message.Pipe = Comm.GetPipeToMst();
+#endif
     Comm.PackTimeDataMessageSignal(InterfaceID, DataToSend, Message);
     TLMCommUtil::SendMessage(Message);
     DataToSend.resize(0);

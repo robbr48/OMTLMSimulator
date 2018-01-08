@@ -14,9 +14,12 @@ TLMInterface3D::TLMInterface3D(TLMClientComm &theComm, std::string &aName, doubl
 
 TLMInterface3D::~TLMInterface3D() {
     if(DataToSend.size() != 0) {
-        TLMErrorLog::Log(std::string("Interface ") + GetName() + " sends rest of data for time= " +
+        TLMErrorLog::Info(std::string("Interface ") + GetName() + " sends rest of data for time= " +
                          TLMErrorLog::ToStdStr(DataToSend.back().time));
 
+#ifdef NAMED_PIPES
+    Message.Pipe = Comm.GetPipeToMst();
+#endif
         Comm.PackTimeDataMessage3D(InterfaceID, DataToSend, Message);
         TLMCommUtil::SendMessage(Message);
     }
@@ -24,7 +27,7 @@ TLMInterface3D::~TLMInterface3D() {
 
 
 void TLMInterface3D::UnpackTimeData(TLMMessage &mess) {
-    TLMErrorLog::Log(std::string("Interface ") + GetName());
+    TLMErrorLog::Info(std::string("Interface ") + GetName());
     Comm.UnpackTimeDataMessage3D(mess, TimeData);
 
     NextRecvTime =  TimeData.back().time + Params.Delay;
@@ -226,21 +229,23 @@ void TLMInterface3D::SetTimeData(double time,
         item.GenForce[i+3] = -item.GenForce[i+3] +  Params.Zfr * ang_speed[i];
     }
 
-    TLMErrorLog::Log(std::string("Interface ") + GetName() +
-                     " SET for time= " + TLMErrorLog::ToStdStr(time)
-                     //  		     + " force:"
-                     //  		     + TLMErrorLog::ToStdStr(item.GenForce[0])+ ", "
-                     //  		     + TLMErrorLog::ToStdStr(item.GenForce[1])+ ", "
-                     //  		     + TLMErrorLog::ToStdStr(item.GenForce[2])+ ", "
-                     //  		     + " position:"
-                     //  		     + TLMErrorLog::ToStdStr(item.Position[0])+ ", "
-                     //  		     + TLMErrorLog::ToStdStr(item.Position[1])+ ", "
-                     //  		     + TLMErrorLog::ToStdStr(item.Position[2])+ ", "
-                     // 		     + "torque: "
-                     // 		     + TLMErrorLog::ToStdStr(item.GenForce[3])+ ", "
-                     // 		     + TLMErrorLog::ToStdStr(item.GenForce[4])+ ", "
-                     // 		     + TLMErrorLog::ToStdStr(item.GenForce[5]));
-                    );
+    if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+        TLMErrorLog::Info(std::string("Interface ") + GetName() +
+                         " SET for time= " + TLMErrorLog::ToStdStr(time)
+                         //  		     + " force:"
+                         //  		     + TLMErrorLog::ToStdStr(item.GenForce[0])+ ", "
+                         //  		     + TLMErrorLog::ToStdStr(item.GenForce[1])+ ", "
+                         //  		     + TLMErrorLog::ToStdStr(item.GenForce[2])+ ", "
+                         //  		     + " position:"
+                         //  		     + TLMErrorLog::ToStdStr(item.Position[0])+ ", "
+                         //  		     + TLMErrorLog::ToStdStr(item.Position[1])+ ", "
+                         //  		     + TLMErrorLog::ToStdStr(item.Position[2])+ ", "
+                         // 		     + "torque: "
+                         // 		     + TLMErrorLog::ToStdStr(item.GenForce[3])+ ", "
+                         // 		     + TLMErrorLog::ToStdStr(item.GenForce[4])+ ", "
+                         // 		     + TLMErrorLog::ToStdStr(item.GenForce[5]));
+                        );
+    }
 
     // Send the data if we past the synchronization point or are in data request mode.
     if(time >= LastSendTime + Params.Delay / 2 || Params.mode > 0.0) {
@@ -300,12 +305,17 @@ void TLMInterface3D::TransformTimeDataToCG(std::vector<TLMTimeData3D>& timeData,
 void TLMInterface3D::SendAllData() {
     LastSendTime = DataToSend.back().time;
 
-    TLMErrorLog::Log(std::string("Interface ") + GetName() + " sends data for time= " +
-                     TLMErrorLog::ToStdStr(LastSendTime));
+    if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Info) {
+        TLMErrorLog::Info(std::string("Interface ") + GetName() + " sends data for time= " +
+                         TLMErrorLog::ToStdStr(LastSendTime));
+    }
 
     // Transform to global inertial system cG ans send
     TransformTimeDataToCG(DataToSend, Params);
 
+#ifdef NAMED_PIPES
+    Message.Pipe = Comm.GetPipeToMst();
+#endif
     Comm.PackTimeDataMessage3D(InterfaceID, DataToSend, Message);
     TLMCommUtil::SendMessage(Message);
     DataToSend.resize(0);
