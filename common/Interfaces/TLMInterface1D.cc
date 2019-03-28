@@ -144,9 +144,9 @@ void TLMInterface1D::GetForce(double time,
     }
 
     if(TLMErrorLog::GetLogLevel() >= TLMLogLevel::Warning) {
-        TLMErrorLog::Warning("Time = "+std::to_string(time)+
-                             ", GetForce(speed="+std::to_string(speed)+
-                             ") returns force="+std::to_string(*force));
+        //TLMErrorLog::Warning("Time = "+std::to_string(time)+
+        //                     ", GetForce(speed="+std::to_string(speed)+
+        //                     ") returns force="+std::to_string(*force));
     }
 }
 
